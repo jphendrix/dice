@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Big Roller</title>
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script src="Chart.min.js"></script>
+<script>
+    $(document).ready(function()
+    {
+        $(".results").hide(); //These will be shown
+        $(".chart").hide();   //when there is data to show
+        
+        //Click Event Handlers for buttons
+        $(".bigRoller") .click(function(){start();                  });
+        $(".pause")     .click(function(){_isPaused=true;rollem(0); });
+        $(".clear")     .click(function(){clear();                  });
+		
+		//initialize the variables
+		clear();
+	});
+    
+    //Global variables
+    var _cumulative_total = [];
+    var _p_total          = [];
+    var _cumulative_rolls = 0;
+    var _isPaused         = true;
+	var _max_value = 0;
+	var _min_value = 0;
+    
+    function clear()
+    {
+        //Only clear the global variables if nothing is running
+        if(_isPaused)
+        {
+            //Clear the data
+			_cumulative_total = [];
+            _p_total          = [];
+            _cumulative_rolls = 0;
+			
+			_min_value =0;
+			_max_value =0;
+						
+			$(".dice").each(function()
+            {
+				for(let i=2; i<20; i++){
+					if($(this).hasClass('d'+i)){
+						_min_value += 1;
+						_max_value += i;
+					}
+				}
+			});
+			
+			//rebuild the table
+			$t = $("div.results table");
+			$t.empty();
+			
+			$tr_sums = $("<tr><th class='row_header'>Possible Sums:</th></tr>");
+			$tr_count = $("<tr><th class='row_header'>Frequency Count:</th></tr>");
+			$tr_percent = $("<tr><th class='row_header'>Frequency Percent:</th></tr>");
+			
+			$t.append($tr_sums);
+			$t.append($tr_count);
+			$t.append($tr_percent);
+			
+			//Rebuild the arrays and table rows
+			for(let i=_min_value; i<= _max_value; i++){
+				_cumulative_total.push(0);
+				_p_total.push(0)
+				$tr_sums.append("<th>"+i+"</th>");
+				$tr_count.append("<td class='sum_"+i+"'><span>0</span></td>");
+				$tr_percent.append("<th class='p_"+i+"'><span>0%</span></th>");
+			}
+
+            //Hide the results UI
+            update_UI(_cumulative_rolls,_cumulative_total, false);
+            $(".results").hide('slow');
+            $(".chart")  .hide('slow');
+        }else
+        {
+            //Stop processing and call clear again after 10 milliseconds
+            _isPaused = true;
+            setTimeout(function(){clear();},10);
+        }
+    }
+    
+    function start()
+    {
+        _isPaused=false; 
+        var i = $(".number_of_rolls").val() * 1;
+        rollem(i);
+    }
+    
+    function rollem(i)
+    {
+        if(i>0 && !_isPaused)
+        {
+            var total = 0;
+            _cumulative_rolls ++;
+            
+            // roll all the dice (should be two)
+            $(".dice").each(function()
+            {
+                //Get random number between 1 and max value die value (i.e. d6 = randome number between 1 & 6)
+                var d = 0;
+				for(let i=2; i<20; i++){
+					if($(this).hasClass('d'+i)){
+						d = Math.floor((Math.random() * i) + 1);
+					}
+				}
+				
+                //Add result to the total (add the dice together)
+                total += d;
+                
+                //Update the image to show the dice face
+                $(this).removeClass("pip_1 pip_2 pip_3 pip_4 pip_5 pip_6");
+                $(this).addClass("pip_"+d);
+            });
+            
+            //Shift the cells down to save room in the array (impossible to roll zero or 1 with two dice)
+			//and our array size if offset to reflect this
+            _cumulative_total[total-_min_value] += 1;
+            
+            /*
+             * Help the UI responsiveness by only updating the UI every 1000th roll
+             */
+            if(_cumulative_rolls%1000 == 0)
+            {
+				//Continue rolling after 1 milliseconds.  This gives the UI enough time to re-draw the screen.
+				update_UI(_cumulative_rolls,_cumulative_total, false);
+                setTimeout(function(){rollem(i-1)},1);
+            }else
+            {
+				//Continue rolling without any delay
+                rollem(i-1);
+            }
+        }else
+        {
+            _isPaused = true;
+			update_UI(_cumulative_rolls,_cumulative_total, true);
+        }
+    }
+   
+    function update_UI(rolls, data, draw_graph)
+    {
+        var p_data = [];
+		var labels = [];
+		//build the percent array & labels
+		for(let i=_min_value; i<= _max_value; i++){
+			p_data.push(0);
+			labels.push(i);
+		}
+        
+        $(".tot_rolls").html(rolls);
+		
+        for(var r=0; r<data.length; r++)
+        {
+            //shift the cells back up
+            $(".sum_"+(r+_min_value)+" span").html(data[r]);
+            var p = (data[r]/rolls)*100; //Calc the %
+            p_data[r] = p;
+            $(".p_"+(r+_min_value)+" span").html(p.toFixed(2) + "%");
+        }
+		
+        $(".results").show('slow');
+        
+        if(draw_graph)
+        {
+            var d = 
+            {
+                labels : labels,
+                datasets : [{
+                                fillColor : "rgba(220,220,220,0.5)",
+                                strokeColor : "rgba(220,220,220,1)",
+                                pointColor : "rgba(220,220,220,1)",
+                                pointStrokeColor : "#fff",
+                                data : p_data}]
+            }
+            
+            //build the chart.
+            var ctx = $("#myChart").get(0).getContext("2d");
+            var myNewChart = new Chart(ctx);
+            new Chart(ctx).Line(d,{scaleLabel:"<%=value%>%"});
+            
+            $(".chart").show('slow');
+        }
+    }
+    
+</script>
+<style>
+.dice
+{
+    width:100px;
+    height:100px;
+    display: inline-block;
+}
+.dice_graphic
+{
+   display: inline-block;
+}
+.input
+{
+   vertical-align: top;
+   display: inline-block;
+}
+td
+{
+    border-style:groove;
+    border-width:thin;
+}
+
+th.row_header{text-align:left;}
+.d2.pip_1{background:url('d2.png') -1px -1px;}
+.d2.pip_2{background:url('d2.png') -101px -1px;}
+
+.d3.pip_1{background:url('d3.png') -1px -1px;}
+.d3.pip_2{background:url('d3.png') -101px -1px;}
+.d3.pip_3{background:url('d3.png') -201px -1px;}
+
+.d6.pip_1{background:url('d6.png') -1px -1px;}
+.d6.pip_2{background:url('d6.png') -101px -1px;}
+.d6.pip_3{background:url('d6.png') -201px -1px;}
+.d6.pip_4{background:url('d6.png') -301px -1px;}
+.d6.pip_5{background:url('d6.png') -401px -1px;}
+.d6.pip_6{background:url('d6.png') -501px -1px;}
+</style>
+</head>
+<body>
+    <div class="content">
+        <div class="input">
+            <div>
+                <span># of rolls:</span>
+                <input type="text" class="number_of_rolls" value="100"></input>
+                <button class="bigRoller">Roll</button>
+                <button class="pause">Stop!</button>
+                <button class="clear">Clear</button>
+            </div>
+        </div>
+        <div class="dice_graphic">
+            <div class="dice pip_3 d3"></div>
+			<div class="dice pip_3 d3"></div>
+            <div class="dice pip_3 d3"></div>
+        </div>
+        <div class="results">
+            <div>
+                <span>Total Rolls:</span>
+                <span class="tot_rolls"></span>
+            </div>
+            <div class="chart">
+                <canvas id="myChart" width="400" height="400"></canvas>
+            </div>
+            <table>
+                <tr>
+                    <th class="row_header">Possible Sums:</th>
+                    <th>2</th>
+                    <th>3</th>
+                    <th>4</th>
+                    <th>5</th>
+                    <th>6</th>
+                    <th>7</th>
+                    <th>8</th>
+                    <th>9</th>
+                    <th>10</th>
+                    <th>11</th>
+                    <th>12</th>
+                </tr>
+                <tr>
+                    <th class="row_header">frequency Count:</th>
+                    <td class="sum_2"><span></span></td>
+                    <td class="sum_3"><span></span></td>
+                    <td class="sum_4"><span></span></td>
+                    <td class="sum_5"><span></span></td>
+                    <td class="sum_6"><span></span></td>
+                    <td class="sum_7"><span></span></td>
+                    <td class="sum_8"><span></span></td>
+                    <td class="sum_9"><span></span></td>
+                    <td class="sum_10"><span></span></td>
+                    <td class="sum_11"><span></span></td>
+                    <td class="sum_12"><span></span></td>
+                </tr>
+                <tr>
+                    <th class="row_header">frequency Percent:</th>
+                    <td class="p_2"><span></span></td>
+                    <td class="p_3"><span></span></td>
+                    <td class="p_4"><span></span></td>
+                    <td class="p_5"><span></span></td>
+                    <td class="p_6"><span></span></td>
+                    <td class="p_7"><span></span></td>
+                    <td class="p_8"><span></span></td>
+                    <td class="p_9"><span></span></td>
+                    <td class="p_10"><span></span></td>
+                    <td class="p_11"><span></span></td>
+                    <td class="p_12"><span></span></td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
